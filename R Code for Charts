@@ -1,0 +1,112 @@
+library(treemap) #for treemap, duh
+library(ggplot2) #other viz
+library(dplyr) #data manipulation
+library(reshape2) #for melt function
+library(RColorBrewer) #for nice colors
+
+MMC <- read.csv("DashDataFull.csv", header = TRUE, stringsAsFactors = FALSE)
+
+
+ggplot(MMC, aes(x = BalFY13End, y = SalesTot))+geom_point(size = 3.5)
+ggplot(MMC, aes(x = BalFY13End, y = log(Total.Reach))) + geom_point(size = 3.5)
+
+MMC$Grade <- ordered(MMC$Grade, levels = c("C", "B", "A"))
+MMC$FHSTATUS <- ordered(MMC$FHSTATUS, levels = c("NF", "PF", "F" ))
+
+#create the FH bins manually
+attach(MMC)
+MMC$FHBINS[MMC$FHSCORE <= 10] <- "0-10"
+MMC$FHBINS[MMC$FHSCORE > 10 & MMC$FHSCORE <= 20] <- "11-20"
+MMC$FHBINS[MMC$FHSCORE > 20 & MMC$FHSCORE <= 30] <- "21-30"
+MMC$FHBINS[MMC$FHSCORE > 30 & MMC$FHSCORE <= 40] <- "31-40"
+MMC$FHBINS[MMC$FHSCORE > 40 & MMC$FHSCORE <= 50] <- "41-50"
+MMC$FHBINS[MMC$FHSCORE > 50 & MMC$FHSCORE <= 60] <- "51-60"
+MMC$FHBINS[MMC$FHSCORE > 60 & MMC$FHSCORE <= 70] <- "61-70"
+MMC$FHBINS[MMC$FHSCORE > 70 & MMC$FHSCORE <= 80] <- "71-80"
+MMC$FHBINS[MMC$FHSCORE > 80 & MMC$FHSCORE <= 90] <- "81-90"
+MMC$FHBINS[MMC$FHSCORE > 90 ] <- "91-100"
+detach(MMC)
+
+table(MMC$FHBINS)
+
+MMC$FHBINS <- ordered(MMC$FHBINS, levels = c("0-10",
+                                             "10-20", 
+                                             "21-30", 
+                                             "31-40",
+                                             "41-50",
+                                             "51-60", 
+                                             "61-70", 
+                                             "71-80", 
+                                             "81-90",
+                                             "91-100"))
+
+#need to manually set colors, change axis labels and 
+ggplot(MMC, aes(x = FHBINS, y = Total.Reach, fill = Grade, order = Grade)) +
+         geom_bar(stat = "identity") + 
+         scale_fill_grey(start = 0.6, end = 0.2) +
+         theme_bw() +
+         theme(panel.grid.major.y = element_blank(), 
+               panel.grid.major.x = element_blank(),
+               panel.grid.minor.y = element_blank())
+
+
+ggplot(MMC, aes(x = sqrt(Total.Reach), y = sqrt(SalesTot), colour = Grade)) +
+  geom_point(aes(size = BalFY13End)) +
+  scale_size_area(max_size = 20, guide = FALSE) +
+  scale_colour_brewer(palette = "Set1") +
+  geom_text(aes(x = sqrt(Total.Reach) + 100, label = Merge), size = 4, hjust = 0)
+
+TotalReachGrade<- select(MMC, Grade, Total.Reach) %>%
+  transform(Per.Reach = Total.Reach / sum(Total.Reach) * 100) %>%
+  group_by(Grade) %>% 
+  summarise(Per.Reach.Total = sum(Per.Reach))
+
+TotalReachGrade
+
+##treemap of total reach by media type
+
+TotalbyTypeWide <- select(MMC, 
+                          Merge, 
+                          Broadcast.Reach, 
+                          Print.Reach, 
+                          News.Agency.Reach, 
+                          Total.Online.Reach)
+
+TotalbyType <- melt(TotalbyTypeWide, id.vars = "Merge", variable.name = "Type", value.name = "Reach")
+
+TotalbyType$Reach <- as.numeric(TotalbyType$Reach)
+
+sum(TotalbyType$Reach, na.rm = T)
+
+#apply(TotalbyType, 2, function(x) length(which(is.na(x))))  # checking to see if NAs introduced
+
+TypeTableReach <- group_by(TotalbyType, Type) %>%
+                  summarise(Total = sum(Reach, na.rm = T))
+
+
+treemap(TypeTableReach, 
+        index = "Type", 
+        vSize = "Total",
+        vColor = arrange(desc("Total")),
+        palette = c("#084594", "#6baed6","#9ecae1", "#2171b5"),
+        algorith = "squarified",
+        border.col = "white")
+
+##treemap of total outstanding reach by 
+
+OutbyType <- select(MMC,
+                    Merge,
+                    MediaPR,
+                    BalFY13End
+                    )
+
+OutbyTypeTable <- group_by(OutbyType, MediaPR) %>%
+                  summarise(Total = sum(BalFY13End, na.rm = T))
+  
+treemap(OutbyTypeTable, 
+        index = "MediaPR", 
+        vSize = "Total", 
+        vColor = arrange(desc("Total")), 
+        palette = c("#a6bddb", "#d0d1e6", "#034e7b","#0570b0", "#3690c0", "#74a9cf"),
+        algorith = "squarified", 
+        border.col = "white")
